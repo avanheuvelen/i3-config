@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Lemonade settings
+# Do `cp settings.template settings`
+# Tweak this, if you want to...
+
+# DEBUG Can be: 0 no debugging, 1 basic msg, 2 extended msgs
+DEBUG=0
+
+# This command should return an integer. It is your current temperature
+WEATHER_ZONE=""  # Your ICAO code
+WEATHER_COMMAND="weather-report $WEATHER_ZONE -m | grep Temperature | awk '{print \$2}'"
+
+RAIN_LAT=""
+RAIN_LON=""
+
+# Background color of the bar
+BG_COLOR="#292929"
+
+# Height of the bar
+BARHEIGHT=30
+
+# Monospacing seems a bit broken on my machine
+# Change these back to exchange antialiasing for monospacing
+
+#FONT1="-*-droid sans mono-medium-r-normal-*-*-95-*-*-*-*-*-*"
+#FONT2="-*-fontawesome-medium-r-normal-*-*-*-*-*-*-*-*-*"
+#FONT3="-*-droid sans mono-medium-r-normal-*-*-82-*-*-*-*-*-*"
+
+FONT1="droid sans mono"
+FONT2="fontawesome"
+FONT3="droid sans mono-10"
+
+RAIN_COLOR_LOW="#356893"
+RAIN_COLOR_MED="#132C41"
+RAIN_COLOR_HIGH="#FFB958"
+RAIN_COLOR_INSANE="#A8D542"
+
+# Remove to not show bitcoin price
+BTC="eur"

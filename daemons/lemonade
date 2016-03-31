@@ -1,0 +1,110 @@
+#!/bin/bash
+
+if [ -e ~/.config/i3/settings ]; then
+    source ~/.config/i3/settings
+else
+    echo "No settings file found! (Did you copy settings.template?)" >&2
+    echo "No settings file found! (Did you copy settings.template?)" > ~/.config/i3/lemonade.log
+    exit 1
+fi
+
+check_power() {
+    # TODO: Disable this when no battery stuff
+    POW_LVL=$(eval $CMD_BATTERY_PERCENTAGE)
+    CHARGING=$(eval $CMD_BATTERY_CHARGING)
+    printf "POW\t%s\t%s\n" $POW_LVL $CHARGING > $fifo
+}
+
+check_btc() {
+    printf "BTC\t%s\t%s\n" $(curl -s https://btc-e.com/api/3/ticker/btc_$BTC | cut -d',' -f3 | tr -d '"avg":' | xargs printf '%4.2f\n') $(curl -s https://shapeshift.io/rate/btc_eth | cut -d',' -f2 | tr -d '"rate":' | tr -d '}' | xargs printf '%4.2f\n') > $fifo
+}
+
+check_rain() {
+    printf "RAIN\t%s\n" $(~/.config/i3/scripts/check_rain.sh) > ${fifo}
+}
+
+check_temp() {
+    printf "TEMP\t%s\n" $(eval $WEATHER_COMMAND) > ${fifo}
+}
+check_vol() {
+    echo -e "VOL $(~/.config/i3/scripts/get_volume.sh)" > ${fifo}
+}
+
+fifo="/tmp/i3_lemonbar_${USER}"
+
+trap 'trap - TERM; kill 0' INT TERM QUIT EXIT
+
+[ -e "${fifo}" ] && rm "${fifo}"
+mkfifo "${fifo}"
+
+# Conky will keep this fifo occupied
+conky -c $HOME/.config/i3/configs/conky> ${fifo} &
+
+MONITORDATA=`~/.config/i3/scripts/get_monitorconf.py`
+
+MONITORS=(${MONITORDATA})
+
+MULTIPLEX_TARGETS=""
+for monitor in "${MONITORS[@]}"; do
+    OLDIFS=$IFS; IFS=','
+    MONITOR_DATA=(${monitor})
+    IFS=$OLDIFS
+
+    fifo_name="/tmp/i3_lemonbar_${USER}_${MONITOR_DATA[0]}"
+
+    # Make fifo for this monitor
+    [ -e "${fifo_name}" ] && rm "${fifo_name}"
+    mkfifo "${fifo_name}"
+
+    MULTIPLEX_TARGETS+="${fifo_name} "
+
+    # Keep the fifo open
+    while true; do sleep 9999999; done > "${fifo_name}" &
+done
+
+# Start multiplexer
+cat ${fifo} | ~/.config/i3/daemons/fifo_multiplexer.sh $MULTIPLEX_TARGETS &
+
+/usr/bin/python ~/.config/i3/daemons/subscription_handler.py &
+
+i=0
+while :; do 	
+	((i=i+1))
+
+    if ! ((i % 5 )); then
+        [ -z "$CMD_BATTERY_PERCENTAGE" ] || check_power
+    fi
+    if ! ((i % 30 )); then
+        check_rain
+    fi
+    if ! ((i % 300 )); then
+        check_temp
+        [ -z "$BTC" ] || check_btc
+    fi
+
+	sleep 1s;
+done &
+
+for monitor in "${MONITORS[@]}"; do
+    OLDIFS=$IFS; IFS=','
+    MONITOR_DATA=(${monitor})
+    IFS=$OLDIFS
+
+    fifo_name="/tmp/i3_lemonbar_${USER}_${MONITOR_DATA[0]}"
+
+    cat "${fifo_name}" \
+        | ~/.config/i3/daemons/lemonbar_parser.sh ${MONITOR_DATA[0]} \
+        | lemonbar -g ${MONITOR_DATA[1]}x${BARHEIGHT}+${MONITOR_DATA[3]}+0 \
+                -f "$FONT1" -f "$FONT2" -f "$FONT3" \
+                -B "$BG_COLOR" \
+                -u 2 \
+                -p -n "lemonade_${fifo_name}" > ${fifo} &
+
+done
+
+check_rain &
+check_temp &
+[ -z "$BTC" ] || check_btc &
+[ -z "$CMD_BATTERY_PERCENTAGE" ] || check_power &
+
+wait
